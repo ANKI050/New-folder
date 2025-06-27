@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Bar + Pie Chart with Custom Tooltips</title>
+  <link rel="stylesheet" href="animations.css">
+
+  <!-- Google Charts -->
+  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <!-- SAS VA Helper Scripts -->
+  <script type="text/javascript" src="../thirdPartyHelpers/google.js"></script>
+  <script type="text/javascript" src="../util/messagingUtil.js"></script>
+  <script type="text/javascript" src="../util/contentUtil.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      flex-direction: row;
+      height: 100vh;
+      background: linear-gradient(to right, #b0c4de, #f8f9fa);
+      justify-content: space-around;
+      align-items: center;
+    }
+
+    .card {
+      background-color: #ffffff;
+      border-radius: 20px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+      padding: 20px;
+      flex: 1;
+      margin: 20px;
+      min-width: 300px;
+      height: 90%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card h2 {
+      margin: 0 0 10px 0;
+      font-size: 1.25rem;
+      font-weight: 600;
+      text-align: center;
+      color: #333333;
+      border-bottom: 1px solid #dddddd;
+      padding-bottom: 8px;
+    }
+
+    .chart-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      border: 2px solid #cccccc;
+      border-radius: 10px;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+
+    .dropdown-container {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    select {
+      font-size: 0.9rem;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid #cccccc;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h2>Bar Chart</h2>
+    <div class="dropdown-container">
+      <label for="chartType">Select Chart Type: </label>
+      <select id="chartType">
+        <option value="BarChart">Bar</option>
+        <option value="ColumnChart">Column</option>
+        <option value="LineChart">Line</option>
+      </select>
+    </div>
+    <div id="barChart" class="chart-container"></div>
+  </div>
+
+  <div class="card">
+    <h2>Pie Chart</h2>
+    <div id="pieChart" class="chart-container"></div>
+  </div>
+
+  <script>
+    google.charts.load('current', { packages: ['corechart'] });
+
+    let chartType = 'BarChart';
+    let barChart, pieChart, resultName, resultDataGlobal;
+
+    function drawCharts(resultData) {
+      resultDataGlobal = resultData;
+
+      const rawTable = va.googleHelper.createDataTable(resultData);
+      const dataTable = new google.visualization.DataTable();
+
+      dataTable.addColumn('string', rawTable.getColumnLabel(0));
+      dataTable.addColumn('number', rawTable.getColumnLabel(1));
+      dataTable.addColumn({ type: 'string', role: 'tooltip' });
+
+      for (let i = 0; i < rawTable.getNumberOfRows(); i++) {
+        const label = rawTable.getValue(i, 0);
+        const value = rawTable.getValue(i, 1);
+        const tooltip = `${label}: ${value.toLocaleString()} units`;
+        dataTable.addRow([label, value, tooltip]);
+      }
+
+      const barOptions = {
+        legend: 'none',
+        hAxis: { title: dataTable.getColumnLabel(0) },
+        vAxis: { title: dataTable.getColumnLabel(1) },
+        tooltip: { isHtml: true }
+      };
+
+      const pieOptions = {
+        legend: { position: 'right' },
+        pieHole: 0.3,
+        tooltip: { isHtml: true },
+        chartArea: {
+          width: '95%',
+          height: '95%'
+        }
+      };
+
+      const barChartContainer = document.getElementById('barChart');
+      barChartContainer.innerHTML = "";
+      barChart = new google.visualization[chartType](barChartContainer);
+      barChart.draw(dataTable, barOptions);
+
+      const pieChartContainer = document.getElementById('pieChart');
+      pieChartContainer.innerHTML = "";
+      pieChart = new google.visualization.PieChart(pieChartContainer);
+      pieChart.draw(dataTable, pieOptions);
+
+      google.visualization.events.addListener(barChart, 'select', () => handleSelection(barChart));
+      google.visualization.events.addListener(pieChart, 'select', () => handleSelection(pieChart));
+    }
+
+    function handleSelection(chart) {
+      const selection = chart.getSelection();
+      if (selection.length > 0 && resultName) {
+        const selectedRow = selection[0].row;
+        va.messagingUtil.postSelectionMessage(resultName, [selectedRow]);
+      }
+    }
+
+    function onDataReceived(resultData) {
+      resultName = resultData.resultName;
+
+      if (va.contentUtil.validateRoles(resultData, ['string', 'number'])) {
+        drawCharts(resultData);
+      } else {
+        va.messagingUtil.postInstructionalMessage(resultName, 'Expected one string and one numeric column.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const dropdown = document.getElementById('chartType');
+      dropdown.addEventListener('change', function () {
+        chartType = this.value;
+        if (resultDataGlobal) {
+          drawCharts(resultDataGlobal);
+        }
+      });
+    });
+
+    google.charts.setOnLoadCallback(() => {
+      const mockData = {
+        resultName: "mockResult",
+        data: [
+          ["Apple", 30],
+          ["Banana", 45],
+          ["Orange", 25]
+        ],
+        columns: [
+          { label: "Fruit", type: "string" },
+          { label: "Sales", type: "number", format: "COMMA" }
+        ]
+      };
+      onDataReceived(mockData);
+    });
+
+    va.contentUtil.setupResizeListeners(() => location.reload());
+  </script>
+</body>
+</html>
